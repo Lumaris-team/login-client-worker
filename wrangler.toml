@@ -5,9 +5,6 @@ compatibility_date = "2026-07-19"
 workers_dev = true
 compatibility_flags = ["nodejs_compat"]
 
-[vars]
-WORKERS_ACCOUNT_SUBDOMAIN = "danielersen-cloudflare-account"
-
 # Static site
 [assets]
 directory = "./src/frontend"
