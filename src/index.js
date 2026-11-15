@@ -2,9 +2,14 @@ const TOKEN_TTL = 60;
 const WINDOW_SECONDS = 1800;
 const MAX_USERS_PER_IP = 5;
 const key = (kind, value) => new Request(`https://login-cache.invalid/${kind}/${encodeURIComponent(value)}`);
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
 });
 const read = async (request) => (await caches.default.match(request))?.json() || null;
 const write = (request, value, ttl) => caches.default.put(request, new Response(JSON.stringify(value), {
@@ -13,6 +18,7 @@ const write = (request, value, ttl) => caches.default.put(request, new Response(
 
 export default {
   async fetch(request, env) {
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
     if (request.method !== "POST") return json({ error: "NOT_FOUND" }, 404);
     const url = new URL(request.url);
     const body = await request.json().catch(() => null);
