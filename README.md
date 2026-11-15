@@ -3,6 +3,8 @@
 This is a repository template for Cloudflare Workers projects.
 # login-client-worker
 
+Deployment configuration refreshed.
+
 Worker de connexion par pseudo pour un compte Cloudflare individuel.
 
 Configurer dans le Secret Store Cloudflare du compte cible un binding nommé
