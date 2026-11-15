@@ -30,10 +30,10 @@ export default {
 
     if (url.pathname !== "/api/login") return json({ error: "NOT_FOUND" }, 404);
     if (!body?.username || typeof body.password !== "string") return json({ error: "NOT_FOUND" }, 404);
-    const expectedUsername = await env.MAIN_USERNAME?.get();
-    if (!expectedUsername || body.username !== expectedUsername) return json({ error: "NOT_FOUND" }, 404);
     const ban = await read(key("ban", ip));
     if (ban?.until > Date.now()) return json({ error: "NOT_FOUND" }, 404);
+    const expectedUsername = await env.MAIN_USERNAME?.get();
+    if (!expectedUsername || body.username !== expectedUsername) return json({ error: "NOT_FOUND" }, 404);
     const expected = await env.MAIN_PASSWORD?.get();
     const attemptsKey = key("attempts", ip);
     const attempts = await read(attemptsKey) || { count: 0 };
@@ -48,8 +48,7 @@ export default {
     users.values = users.values.filter((entry) => Date.now() - entry.at < WINDOW_SECONDS * 1000);
     if (!users.values.some((entry) => entry.username === body.username)) users.values.push({ username: body.username, at: Date.now() });
     if (users.values.length > MAX_USERS_PER_IP) {
-      const subdomain = env.WORKERS_ACCOUNT_SUBDOMAIN || "danielersen-cloudflare-account";
-      await fetch(`https://main-client-worker.${subdomain}.workers.dev/api/auth/invalidate`, {
+      await fetch(`https://main-client-worker.${body.username}-cloudflare-account.workers.dev/api/auth/invalidate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: "ip_user_limit" }),
