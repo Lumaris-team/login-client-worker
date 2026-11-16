@@ -7,6 +7,10 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
+const notFound = () => new Response("Not Found", {
+  status: 404,
+  headers: { ...corsHeaders, "Content-Type": "text/plain; charset=UTF-8", "Cache-Control": "no-store" },
+});
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
@@ -19,27 +23,27 @@ const write = (request, value, ttl) => caches.default.put(request, new Response(
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
-    if (request.method !== "POST") return json({ error: "NOT_FOUND" }, 404);
+    if (request.method !== "POST") return notFound();
     const url = new URL(request.url);
     const body = await request.json().catch(() => null);
     const ip = body?.ip || request.headers.get("CF-Connecting-IP") || "unknown";
 
     if (url.pathname === "/api/verify") {
-      if (!body?.username || !body.token) return json({ error: "NOT_FOUND" }, 404);
+      if (!body?.username || !body.token) return notFound();
       const record = await read(key("token", body.token || ""));
       if (!record || record.username !== body.username || record.ip !== ip || record.expires < Date.now()) {
-        return json({ error: "NOT_FOUND" }, 404);
+        return notFound();
       }
       await caches.default.delete(key("token", body.token));
       return json({ valid: true });
     }
 
-    if (url.pathname !== "/api/login") return json({ error: "NOT_FOUND" }, 404);
-    if (!body?.username || typeof body.password !== "string") return json({ error: "NOT_FOUND" }, 404);
+    if (url.pathname !== "/api/login") return notFound();
+    if (!body?.username || typeof body.password !== "string") return notFound();
     const ban = await read(key("ban", ip));
-    if (ban?.until > Date.now()) return json({ error: "NOT_FOUND" }, 404);
+    if (ban?.until > Date.now()) return notFound();
     const expectedUsername = await env.MAIN_USERNAME?.get();
-    if (!expectedUsername || body.username !== expectedUsername) return json({ error: "NOT_FOUND" }, 404);
+    if (!expectedUsername || body.username !== expectedUsername) return notFound();
     const expected = await env.MAIN_PASSWORD?.get();
     const attemptsKey = key("attempts", ip);
     const attempts = await read(attemptsKey) || { count: 0 };
@@ -47,7 +51,7 @@ export default {
       attempts.count += 1;
       await write(attemptsKey, attempts, WINDOW_SECONDS);
       if (attempts.count >= 10) await write(key("ban", ip), { until: Date.now() + 600000 }, 600);
-      return json({ error: "NOT_FOUND" }, 404);
+      return notFound();
     }
     const usersKey = key("users", ip);
     const users = await read(usersKey) || { values: [] };
@@ -59,7 +63,7 @@ export default {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: "ip_user_limit" }),
       }).catch(() => {});
-      return json({ error: "NOT_FOUND" }, 404);
+      return notFound();
     }
     await write(usersKey, users, WINDOW_SECONDS);
     const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
