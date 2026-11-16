@@ -25,6 +25,10 @@ async function readSecret(env, name) {
   if (binding && typeof binding.get === "function") return binding.get();
   return null;
 }
+function reject(reason) {
+  console.warn(`LOGIN_REJECTED:${reason}`);
+  return notFound();
+}
 
 export default {
   async fetch(request, env) {
@@ -32,7 +36,7 @@ export default {
     if (request.method !== "POST") return notFound();
     const url = new URL(request.url);
     const body = await request.json().catch(() => null);
-    const ip = body?.ip || request.headers.get("CF-Connecting-IP") || "unknown";
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
 
     if (url.pathname === "/api/verify") {
       if (!body?.username || !body.token) return notFound();
@@ -45,20 +49,29 @@ export default {
     }
 
     if (url.pathname !== "/api/login") return notFound();
-    if (!body?.username || typeof body.password !== "string") return notFound();
+    if (!body?.username || typeof body.password !== "string") return reject("invalid_payload");
     const ban = await read(key("ban", ip));
-    if (ban?.until > Date.now()) return notFound();
-    const expectedUsername = await readSecret(env, "MAIN_USERNAME");
-    if (!expectedUsername || body.username !== expectedUsername) return notFound();
+    if (ban?.until > Date.now()) return reject("ip_banned");
+    const expectedUsername = (await readSecret(env, "MAIN_USERNAME"))?.trim();
+    if (!expectedUsername) {
+      console.error("LOGIN_REJECTED:missing_main_username");
+      return notFound();
+    }
+    if (body.username.trim() !== expectedUsername) return reject("username_mismatch");
     const expected = await readSecret(env, "MAIN_PASSWORD");
+    if (!expected) {
+      console.error("LOGIN_REJECTED:missing_main_password");
+      return notFound();
+    }
     const attemptsKey = key("attempts", ip);
     const attempts = await read(attemptsKey) || { count: 0 };
-    if (!expected || body.password !== expected) {
+    if (body.password !== expected) {
       attempts.count += 1;
       await write(attemptsKey, attempts, WINDOW_SECONDS);
       if (attempts.count >= 10) await write(key("ban", ip), { until: Date.now() + 600000 }, 600);
-      return notFound();
+      return reject("password_mismatch");
     }
+    await caches.default.delete(attemptsKey);
     const usersKey = key("users", ip);
     const users = await read(usersKey) || { values: [] };
     users.values = users.values.filter((entry) => Date.now() - entry.at < WINDOW_SECONDS * 1000);
@@ -69,7 +82,7 @@ export default {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: "ip_user_limit" }),
       }).catch(() => {});
-      return notFound();
+      return reject("ip_user_limit");
     }
     await write(usersKey, users, WINDOW_SECONDS);
     const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
