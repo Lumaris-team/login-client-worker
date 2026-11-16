@@ -19,6 +19,12 @@ const read = async (request) => (await caches.default.match(request))?.json() ||
 const write = (request, value, ttl) => caches.default.put(request, new Response(JSON.stringify(value), {
   headers: { "Content-Type": "application/json", "Cache-Control": `max-age=${ttl}` },
 }));
+async function readSecret(env, name) {
+  const binding = env[name];
+  if (typeof binding === "string") return binding;
+  if (binding && typeof binding.get === "function") return binding.get();
+  return null;
+}
 
 export default {
   async fetch(request, env) {
@@ -42,9 +48,9 @@ export default {
     if (!body?.username || typeof body.password !== "string") return notFound();
     const ban = await read(key("ban", ip));
     if (ban?.until > Date.now()) return notFound();
-    const expectedUsername = await env.MAIN_USERNAME?.get();
+    const expectedUsername = await readSecret(env, "MAIN_USERNAME");
     if (!expectedUsername || body.username !== expectedUsername) return notFound();
-    const expected = await env.MAIN_PASSWORD?.get();
+    const expected = await readSecret(env, "MAIN_PASSWORD");
     const attemptsKey = key("attempts", ip);
     const attempts = await read(attemptsKey) || { count: 0 };
     if (!expected || body.password !== expected) {
