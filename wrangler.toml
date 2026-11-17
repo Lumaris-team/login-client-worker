@@ -17,12 +17,12 @@ binding = "ASSETS"
 # passez pas par l'outil de déploiement automatique.
 # Les valeurs des secrets doivent être définies dans le Secret Store Cloudflare
 # (via le dashboard ou wrangler) sous les noms MAIN_USERNAME et MAIN_PASSWORD.
-[[secret_store_secrets]]
+[[secrets_store_secrets]]
 binding = "MAIN_USERNAME"
 store_id = "__SECRET_STORE_ID__"
 secret_name = "MAIN_USERNAME"
 
-[[secret_store_secrets]]
+[[secrets_store_secrets]]
 binding = "MAIN_PASSWORD"
 store_id = "__SECRET_STORE_ID__"
 secret_name = "MAIN_PASSWORD"
