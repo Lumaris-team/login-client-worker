@@ -14,20 +14,19 @@
 
   // Secret Store bindings (Cloudflare Secret Store du compte cible)
   // Le store_id est injecté automatiquement par l'outil de déploiement
-  // (update-client-account) via la variable d'environnement SECRET_STORE_ID.
-  // Remplacer "__SECRET_STORE_ID__" par l'ID réel du Secret Store si vous ne
-  // passez pas par l'outil de déploiement automatique.
+  // (update-client-account) via l'API Cloudflare (GET /accounts/{accountId}/secret_stores/stores).
+  // Remplacer "__SECRET_STORE_NAME__" par le nom réel de votre Secret Store.
   // Les valeurs des secrets doivent être définies dans le Secret Store Cloudflare
   // (via le dashboard ou wrangler) sous les noms MAIN_USERNAME et MAIN_PASSWORD.
   "secrets_store_secrets": [
     {
       "binding": "MAIN_USERNAME",
-      "store_id": "__SECRET_STORE_ID__",
+      "store_name": "__SECRET_STORE_NAME__",
       "secret_name": "MAIN_USERNAME"
     },
     {
       "binding": "MAIN_PASSWORD",
-      "store_id": "__SECRET_STORE_ID__",
+      "store_name": "__SECRET_STORE_NAME__",
       "secret_name": "MAIN_PASSWORD"
     }
   ],
