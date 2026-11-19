@@ -6,18 +6,19 @@
   "workers_dev": true,
   "compatibility_flags": ["nodejs_compat"],
 
-  // Secret text bindings — injectés automatiquement par update-client-account
-  // L'API Cloudflare Workers ne supporte PAS le type secret_store_secret dans le metadata
-  // de déploiement (erreur 10021). On utilise donc secret_text. Les vraies valeurs sont
-  // injectées après déploiement via l'API Cloudflare Secrets (PUT /workers/scripts/{name}/secrets).
-  "secret_texts": [
+  // Secret Store bindings — injectés automatiquement par update-client-account
+  // Le store_id est résolu via l'API Cloudflare (GET /accounts/{accountId}/secrets_store/stores)
+  // et remplacé automatiquement avant le déploiement. Aucun secret en clair dans le dépôt.
+  "secrets_store_secrets": [
     {
-      "name": "MAIN_USERNAME",
-      "text": ""
+      "binding": "MAIN_USERNAME",
+      "store_id": "__SECRET_STORE_ID__",
+      "secret_name": "MAIN_USERNAME"
     },
     {
-      "name": "MAIN_PASSWORD",
-      "text": ""
+      "binding": "MAIN_PASSWORD",
+      "store_id": "__SECRET_STORE_ID__",
+      "secret_name": "MAIN_PASSWORD"
     }
   ],
 

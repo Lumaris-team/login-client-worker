@@ -59,17 +59,6 @@ export default {
     if (!body?.username || typeof body.password !== "string") return reject("invalid_payload");
     const ban = await read(key("ban", ip));
     if (ban?.until > Date.now()) return reject("ip_banned");
-
-    // === DEBUG LOGS ===
-    console.error("LOGIN_DEBUG: env keys:", Object.keys(env || {}));
-    console.error("LOGIN_DEBUG: env.MAIN_USERNAME type:", typeof env?.MAIN_USERNAME);
-    console.error("LOGIN_DEBUG: env.MAIN_PASSWORD type:", typeof env?.MAIN_PASSWORD);
-    const debugUsername = await readSecret(env, "MAIN_USERNAME");
-    const debugPassword = await readSecret(env, "MAIN_PASSWORD");
-    console.error("LOGIN_DEBUG: readSecret(MAIN_USERNAME) =>", debugUsername ? "SET (hidden)" : "NULL/UNDEFINED");
-    console.error("LOGIN_DEBUG: readSecret(MAIN_PASSWORD) =>", debugPassword ? "SET (hidden)" : "NULL/UNDEFINED");
-    // === END DEBUG LOGS ===
-
     const expectedUsername = (await readSecret(env, "MAIN_USERNAME"))?.trim();
     if (!expectedUsername) {
       console.error("LOGIN_REJECTED:missing_main_username");
