@@ -22,7 +22,14 @@ const write = (request, value, ttl) => caches.default.put(request, new Response(
 async function readSecret(env, name) {
   const binding = env[name];
   if (typeof binding === "string") return binding;
-  if (binding && typeof binding.get === "function") return binding.get();
+  if (binding && typeof binding.get === "function") {
+    try {
+      return await binding.get();
+    } catch (error) {
+      console.warn(`LOGIN_REJECTED:${name.toLowerCase()}_unavailable`);
+      return null;
+    }
+  }
   return null;
 }
 function reject(reason) {

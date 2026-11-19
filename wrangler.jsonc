@@ -12,22 +12,6 @@
     "binding": "ASSETS"
   },
 
-  // Secret text bindings (déployés via update-client-account)
-  // L'API Cloudflare Workers ne supporte PAS le type secret_store_secret
-  // dans le metadata de déploiement (erreur 10021). On utilise donc secret_text.
-  // Les vraies valeurs doivent être configurées ensuite dans :
-  // Cloudflare Dashboard > Workers & Pages > login-client-worker > Settings > Secrets
-  "secret_texts": [
-    {
-      "name": "MAIN_USERNAME",
-      "text": ""
-    },
-    {
-      "name": "MAIN_PASSWORD",
-      "text": ""
-    }
-  ],
-
   // Observability
   "observability": {
     "enabled": true,
