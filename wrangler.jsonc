@@ -7,8 +7,8 @@
   "compatibility_flags": ["nodejs_compat"],
 
   // Secret Store bindings — injectés automatiquement par update-client-account
-  // Le store_id est résolu via l'API Cloudflare (GET /accounts/{accountId}/secrets_store/stores)
-  // et remplacé automatiquement avant le déploiement. Aucun secret en clair dans le dépôt.
+  // via wrangler deploy qui gère nativement le type secret_store_secret.
+  // Remplacer "__SECRET_STORE_ID__" par l'ID du Secret Store du compte cible.
   "secrets_store_secrets": [
     {
       "binding": "MAIN_USERNAME",
