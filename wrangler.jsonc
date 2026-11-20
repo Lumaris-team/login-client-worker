@@ -6,18 +6,17 @@
   "workers_dev": true,
   "compatibility_flags": ["nodejs_compat"],
 
-  // Secrets Store bindings
-  // Le store_id est résolu automatiquement lors du déploiement par l'updater.
-  "secrets_store_secrets": [
+  // Secret text bindings — configurés dans Cloudflare Dashboard
+  // Workers & Pages > login-client-worker > Settings > Secrets.
+  // Le format secret_text est requis par l'API REST Cloudflare Workers.
+  "secret_texts": [
     {
-      "binding": "MAIN_USERNAME",
-      "store_id": "__SECRET_STORE_ID__",
-      "secret_name": "MAIN_USERNAME"
+      "name": "MAIN_USERNAME",
+      "text": ""
     },
     {
-      "binding": "MAIN_PASSWORD",
-      "store_id": "__SECRET_STORE_ID__",
-      "secret_name": "MAIN_PASSWORD"
+      "name": "MAIN_PASSWORD",
+      "text": ""
     }
   ],
 
