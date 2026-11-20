@@ -6,19 +6,17 @@
   "workers_dev": true,
   "compatibility_flags": ["nodejs_compat"],
 
-  // Secret Store bindings — injectés automatiquement par update-client-account
-  // via wrangler deploy qui gère nativement le type secret_store_secret.
-  // Remplacer "__SECRET_STORE_ID__" par l'ID du Secret Store du compte cible.
-  "secrets_store_secrets": [
+  // Secret text bindings — configurés une fois dans Cloudflare Dashboard
+  // Workers & Pages > login-client-worker > Settings > Secrets.
+  // Le format secret_text est requis par l'API REST Cloudflare Workers.
+  "secret_texts": [
     {
-      "binding": "MAIN_USERNAME",
-      "store_id": "__SECRET_STORE_ID__",
-      "secret_name": "MAIN_USERNAME"
+      "name": "MAIN_USERNAME",
+      "text": ""
     },
     {
-      "binding": "MAIN_PASSWORD",
-      "store_id": "__SECRET_STORE_ID__",
-      "secret_name": "MAIN_PASSWORD"
+      "name": "MAIN_PASSWORD",
+      "text": ""
     }
   ],
 
