@@ -1,7 +1,8 @@
 const TOKEN_TTL = 60;
-const JWT_TTL = 30 * 60; // 30 minutes
 const WINDOW_SECONDS = 1800;
 const MAX_USERS_PER_IP = 5;
+const JWT_TTL = 1800; // 30 minutes
+const JWT_RENEW_INTERVAL = 600; // 10 minutes
 const key = (kind, value) => new Request(`https://login-cache.invalid/${kind}/${encodeURIComponent(value)}`);
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,55 +39,61 @@ function reject(reason) {
   return notFound();
 }
 
-// JWT helpers
-async function hmacKey(secret) {
-  return crypto.subtle.importKey(
+// Generate JWT
+async function generateJWT(username, ip, secret) {
+  const header = { alg: "HS256", typ: "JWT" };
+  const payload = {
+    sub: username,
+    ip: ip,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + JWT_TTL,
+    jti: crypto.randomUUID(),
+  };
+  
+  const encodedHeader = btoa(JSON.stringify(header)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const encodedPayload = btoa(JSON.stringify(payload)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  
+  const data = `${encodedHeader}.${encodedPayload}`;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(secret),
+    encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign", "verify"]
+    ["sign"]
   );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
+  const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  
+  return `${data}.${encodedSignature}`;
 }
 
-async function signJWT(payload, secret) {
-  const header = { alg: "HS256", typ: "JWT" };
-  const now = Math.floor(Date.now() / 1000);
-  const jwtPayload = { ...payload, iat: now, exp: now + JWT_TTL };
-  
-  const headerB64 = btoa(JSON.stringify(header)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const payloadB64 = btoa(JSON.stringify(jwtPayload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const signingInput = `${headerB64}.${payloadB64}`;
-  
-  const key = await hmacKey(secret);
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingInput));
-  const signatureB64 = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  
-  return `${signingInput}.${signatureB64}`;
-}
-
+// Verify JWT
 async function verifyJWT(token, secret) {
   try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return { valid: false, reason: "malformed" };
+    const [header, payload, signature] = token.split(".");
+    const data = `${header}.${payload}`;
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
     
-    const [headerB64, payloadB64, signatureB64] = parts;
-    const signingInput = `${headerB64}.${payloadB64}`;
+    const signatureBytes = Uint8Array.from(atob(signature.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+    const isValid = await crypto.subtle.verify("HMAC", key, signatureBytes, encoder.encode(data));
     
-    const key = await hmacKey(secret);
-    const expectedSignature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingInput));
-    const expectedB64 = btoa(String.fromCharCode(...new Uint8Array(expectedSignature))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    if (!isValid) return null;
     
-    if (expectedB64 !== signatureB64) return { valid: false, reason: "bad_signature" };
+    const decodedPayload = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    if (decodedPayload.exp < Math.floor(Date.now() / 1000)) return null;
     
-    const payload = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")));
-    const now = Math.floor(Date.now() / 1000);
-    
-    if (payload.exp < now) return { valid: false, reason: "expired" };
-    
-    return { valid: true, payload };
+    return decodedPayload;
   } catch (e) {
-    return { valid: false, reason: "error" };
+    return null;
   }
 }
 
@@ -104,50 +111,40 @@ export default {
       if (!record || record.username !== body.username || record.ip !== ip || record.expires < Date.now()) {
         return notFound();
       }
-      // Delete the one-time token after verification
       await caches.default.delete(key("token", body.token));
-      
-      // Issue JWT
-      const jwtSecret = await readSecret(env, "JWT_SECRET_KEY");
-      if (!jwtSecret) {
-        console.error("LOGIN_REJECTED:missing_jwt_secret");
-        return notFound();
-      }
-      
-      const jwt = await signJWT({ sub: body.username, ip }, jwtSecret);
-      
-      // Store JWT in cache for verification
-      await write(key("jwt", jwt), { username: body.username, ip, expires: Date.now() + JWT_TTL * 1000 }, JWT_TTL);
-      
-      return json({ valid: true, jwt, expiresIn: JWT_TTL });
+      return json({ valid: true });
     }
 
-    if (url.pathname === "/api/verify-jwt") {
-      if (!body?.username || !body.token) return notFound();
+    if (url.pathname === "/api/renew-jwt") {
+      if (!body?.username || !body.oneTimeToken) return notFound();
       
-      // Verify JWT signature and check cache
-      const jwtSecret = await readSecret(env, "JWT_SECRET_KEY");
-      if (!jwtSecret) {
-        console.error("LOGIN_REJECTED:missing_jwt_secret");
+      // Verify one-time token
+      const tokenRecord = await read(key("one-time-token", body.oneTimeToken));
+      if (!tokenRecord || tokenRecord.username !== body.username || tokenRecord.ip !== ip) {
         return notFound();
       }
       
-      const verification = await verifyJWT(body.token, jwtSecret);
-      if (!verification.valid) {
-        return json({ valid: false, reason: verification.reason });
+      // Generate new JWT
+      const jwtSecret = await readSecret(env, "JWT_SECRET_KEY");
+      if (!jwtSecret) {
+        console.error("JWT_SECRET_KEY not configured");
+        return notFound();
       }
       
-      // Check if JWT is still in cache (not revoked)
-      const cachedJwt = await read(key("jwt", body.token));
-      if (!cachedJwt || cachedJwt.username !== body.username) {
-        return json({ valid: false, reason: "revoked" });
-      }
+      const jwt = await generateJWT(body.username, ip, jwtSecret);
       
-      if (cachedJwt.expires < Date.now()) {
-        return json({ valid: false, reason: "expired" });
-      }
+      // Store JWT in cache
+      const jwtKey = key("jwt", jwt);
+      await write(jwtKey, { username: body.username, ip, expires: Date.now() + JWT_TTL * 1000 }, JWT_TTL);
       
-      return json({ valid: true, payload: verification.payload });
+      // Delete one-time token (it can only be used once)
+      await caches.default.delete(key("one-time-token", body.oneTimeToken));
+      
+      // Generate new one-time token for next renewal
+      const newOneTimeToken = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+      await write(key("one-time-token", newOneTimeToken), { username: body.username, ip, expires: Date.now() + JWT_RENEW_INTERVAL * 1000 }, JWT_RENEW_INTERVAL);
+      
+      return json({ jwt, oneTimeToken: newOneTimeToken });
     }
 
     if (url.pathname !== "/api/login") return notFound();
@@ -156,16 +153,15 @@ export default {
     if (ban?.until > Date.now()) return reject("ip_banned");
     
     // Verify Turnstile token (required)
-    const turnstileToken = body.turnstileToken;
-    if (!turnstileToken) {
-      console.warn("LOGIN_REJECTED:missing_turnstile_token");
+    if (!body.turnstileToken) {
+      console.warn("LOGIN_REJECTED:missing_turnstile");
       return notFound();
     }
     
     try {
       const turnstileSecret = await readSecret(env, "TURNSTILE_SECRET_KEY");
       if (!turnstileSecret) {
-        console.error("LOGIN_REJECTED:missing_turnstile_secret");
+        console.error("TURNSTILE_SECRET_KEY not configured");
         return notFound();
       }
       
@@ -174,7 +170,7 @@ export default {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           secret: turnstileSecret,
-          response: turnstileToken,
+          response: body.turnstileToken,
           remoteip: ip,
         }),
       });
@@ -184,7 +180,7 @@ export default {
         return notFound();
       }
     } catch (error) {
-      console.error("TURNSTILE_VERIFY_ERROR:", error.message);
+      console.warn("TURNSTILE_VERIFY_ERROR:", error.message);
       return notFound();
     }
     
@@ -221,9 +217,21 @@ export default {
       return reject("ip_user_limit");
     }
     await write(usersKey, users, WINDOW_SECONDS);
-    const token = `${crypto.randomUUID()}${crypto.randomUUID()}`;
-    // Store IP + token for later verification
-    await write(key("token", token), { username: body.username, ip, expires: Date.now() + TOKEN_TTL * 1000 }, TOKEN_TTL);
-    return json({ token, username: body.username });
+    
+    // Generate one-time token
+    const oneTimeToken = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    await write(key("one-time-token", oneTimeToken), { username: body.username, ip, expires: Date.now() + JWT_RENEW_INTERVAL * 1000 }, JWT_RENEW_INTERVAL);
+    
+    // Generate initial JWT
+    const jwtSecret = await readSecret(env, "JWT_SECRET_KEY");
+    if (!jwtSecret) {
+      console.error("JWT_SECRET_KEY not configured");
+      return notFound();
+    }
+    
+    const jwt = await generateJWT(body.username, ip, jwtSecret);
+    await write(key("jwt", jwt), { username: body.username, ip, expires: Date.now() + JWT_TTL * 1000 }, JWT_TTL);
+    
+    return json({ jwt, oneTimeToken });
   },
 };
