@@ -6,6 +6,10 @@
   "workers_dev": true,
   "compatibility_flags": ["nodejs_compat"],
 
+  "vars": {
+    "JWT_SECRET_KEY": "__GENERATE_RANDOM_AT_DEPLOY__"
+  },
+
   // Secret Store bindings — injectés automatiquement par update-client-account
   // via wrangler deploy qui gère nativement le type secret_store_secret.
   // Remplacer "__SECRET_STORE_ID__" par l'ID du Secret Store du compte cible.
