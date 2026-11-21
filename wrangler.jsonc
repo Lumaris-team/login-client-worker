@@ -21,11 +21,6 @@
       "secret_name": "MAIN_PASSWORD"
     },
     {
-      "binding": "JWT_SECRET_KEY",
-      "store_id": "__SECRET_STORE_ID__",
-      "secret_name": "JWT_SECRET_KEY"
-    },
-    {
       "binding": "TURNSTILE_SECRET_KEY",
       "store_id": "__SECRET_STORE_ID__",
       "secret_name": "TURNSTILE_SECRET_KEY"
