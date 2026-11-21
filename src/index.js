@@ -7,9 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
-const notFound = () => new Response("Not Found", {
+const notFound = () => new Response(null, {
   status: 404,
-  headers: { ...corsHeaders, "Content-Type": "text/plain; charset=UTF-8", "Cache-Control": "no-store" },
+  headers: { "Cache-Control": "no-store" },
 });
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -59,6 +59,33 @@ export default {
     if (!body?.username || typeof body.password !== "string") return reject("invalid_payload");
     const ban = await read(key("ban", ip));
     if (ban?.until > Date.now()) return reject("ip_banned");
+    
+    // Verify Turnstile token if provided (optional - fails gracefully if not configured)
+    if (body.turnstileToken) {
+      try {
+        const turnstileSecret = await readSecret(env, "TURNSTILE_SECRET_KEY");
+        if (turnstileSecret) {
+          const verifyResponse = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              secret: turnstileSecret,
+              response: body.turnstileToken,
+              remoteip: ip,
+            }),
+          });
+          const verifyResult = await verifyResponse.json();
+          if (!verifyResult.success) {
+            console.warn("LOGIN_REJECTED:turnstile_failed");
+            return notFound();
+          }
+        }
+      } catch (error) {
+        console.warn("TURNSTILE_VERIFY_ERROR:", error.message);
+        // Continue without turnstile if verification fails
+      }
+    }
+    
     const expectedUsername = (await readSecret(env, "MAIN_USERNAME"))?.trim();
     if (!expectedUsername) {
       console.error("LOGIN_REJECTED:missing_main_username");
